@@ -389,26 +389,44 @@ jobs:
           
 
 workflows:
-  default:
+  Integrations:
+    triggers:
+       - schedule:
+           cron: "0 0 * * *"
+           filters:
+             branches:
+               only:
+                 - nanoDeg
     jobs:
-      #- build-frontend:
-      #- build-backend:
-      #- test-frontend:
-      #   requires:
-      #     - build-frontend
-      #     - build-backend
-      #- test-backend:
-      #   requires:
-      #     - build-backend
-      #     - build-frontend
-      #- frontend-security:
-      #   requires:
-      #     - test-frontend
-      #     - test-backend
-      #- backend-security:
-      #   requires:
-      #     - test-backend
-      #     - test-frontend
+      - build-frontend
+      - build-backend
+      - test-frontend:
+         requires:
+           - build-frontend
+           - build-backend
+      - test-backend:
+         requires:
+           - build-backend
+           - build-frontend
+      - frontend-security:
+         requires:
+           - test-frontend
+           - test-backend
+      - backend-security:
+         requires:
+           - test-backend
+           - test-frontend
+
+  deployments:
+    triggers:
+       - schedule:
+           cron: "0 0 * * *"
+           filters:
+             branches:
+               only:
+                 - master
+    jobs:
+      
       #- network-infrastructure:
       #   requires:
       #     - frontend-security
