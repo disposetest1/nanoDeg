@@ -1,7 +1,0 @@
-- name: "Set Server"
-  hosts: remote
-  user: ubuntu
-
-
-  roles:
-    - test
