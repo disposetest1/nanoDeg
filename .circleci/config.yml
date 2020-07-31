@@ -13,6 +13,7 @@ commands:
           command: |
             aws cloudformation delete-stack --stack-name nanoDegFrontendStack-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2
             aws cloudformation delete-stack --stack-name nanoDegBackendStack-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2
+          when: on_fail
       - run:
           name: Revert last Migration
           command: |
@@ -25,17 +26,10 @@ commands:
             else 
             echo "No migration occured"
             fi
-      - run: exit 1
-  com:
-    steps:
-      - run:
-          command: echo first step
           when: on_fail
       - run:
-          command: echo second step
-          when: on_fail
-      - run:
-          command: echo third step
+          name: Return with fail
+          command: exit 1
           when: on_fail
 jobs:
   #build phase
@@ -362,6 +356,7 @@ jobs:
               else
               exit 1
               fi
+      - rollback
 
   #promotion phase
   promotion:
@@ -391,16 +386,6 @@ jobs:
             aws s3 rm s3://udapeople-nanodegfrontend --region us-west-2 --recursive
             aws cloudformation delete-stack --stack-name nanoDegFrontendStack --region us-west-2
             aws cloudformation delete-stack --stack-name nanoDegBackendStack --region us-west-2
-
-  test:
-    docker:
-      - image: amazon/aws-cli
-    steps:
-      - checkout
-      - run:
-          name: test exit
-          command: echo test exit code && exit 1
-      - com
           
 
 workflows:
@@ -444,36 +429,35 @@ workflows:
       #- new-backend-infrastructure:
       #   requires:
       #     - cloudfront-infrastructure
-      #- new-backend-infrastructure
-      #- new-frontend-infrastructure
+      - new-backend-infrastructure
+      - new-frontend-infrastructure
       #- new-frontend-infrastructure:
       #   requires:
       #     - cloudfront-infrastructure
-      #- save-new-backurl:
-      #   requires:
-      #     - new-backend-infrastructure
-      #- new-backend-config:
-      #   requires:
-      #     - new-backend-infrastructure   
-      #- db-migrations:
-      #   requires:
-      #     - new-backend-config 
-      #- upload-backend:
-      #   requires:
-      #     - db-migrations
-      #- deploy-frontend:
-      #   requires:
-      #     - upload-backend
-      #- smoketest:
-      #   requires:
-      #      - deploy-frontend
-      #- promotion:
-      #   requires:
-      #     - smoketest
-      #- cleanup:
-      #   requires:
-      #     - promotion
-      - test
+      - save-new-backurl:
+         requires:
+           - new-backend-infrastructure
+      - new-backend-config:
+         requires:
+           - new-backend-infrastructure   
+      - db-migrations:
+         requires:
+           - new-backend-config 
+      - upload-backend:
+         requires:
+           - db-migrations
+      - deploy-frontend:
+         requires:
+           - upload-backend
+      - smoketest:
+         requires:
+            - deploy-frontend
+      - promotion:
+         requires:
+           - smoketest
+      - cleanup:
+         requires:
+           - promotion
 
 
            
