@@ -29,26 +29,26 @@
     name: ["git"]
     state: latest
 
-- name: Creates directory
-  file:
-    path: ~/dist
-    state: directory
+#- name: Creates directory
+#  file:
+#    path: ~/dist
+#    state: directory
 
-- name: "set the index page"
-  become: true
-  copy:
-    src: main.js
-    dest: /home/ubuntu/dist/main.js
-    backup: yes
+#- name: "set the index page"
+#  become: true
+#  copy:
+#    src: main.js
+#    dest: /home/ubuntu/dist/main.js
+#    backup: yes
 
 - name: "Install pm2"
   become: true
   shell: |
       npm install -g pm2
 
-- name: Executing node
-  shell: |
-    pm2 start ~/dist/main.js -f
+#- name: Executing node
+#  shell: |
+#    pm2 start ~/dist/main.js -f
 
 - name: "Cofigure pm2"
   become: true
