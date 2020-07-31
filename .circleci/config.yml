@@ -1,0 +1,479 @@
+version: 2.1
+
+commands:
+  #rollback phase
+  rollback:
+    steps:
+      - run:
+          name: Delete s3 files
+          command: aws s3 rm s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7}/* --region us-west-2 --recursive
+          when: on_fail
+      - run:
+          name: Delete current stacks
+          command: |
+            aws cloudformation delete-stack --stack-name nanoDegFrontendStack-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2
+            aws cloudformation delete-stack --stack-name nanoDegBackendStack-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2
+      - run:
+          name: Revert last Migration
+          command: |
+            VALUE=$(curl -H "token: ${CIRCLE_WORKFLOW_ID:0:8}" --request GET https://api.memstash.io/values/<< pipeline.id >>_migrations)
+            if $VALUE == "true"
+            then
+            cd ./backend
+            echo "Reverting migrations"
+            npm run migrations:revert
+            else 
+            echo "No migration occured"
+            fi
+      - run: exit 1
+  com:
+    steps:
+      - run:
+          command: echo first step
+          when: on_fail
+      - run:
+          command: echo second step
+          when: on_fail
+      - run:
+          command: echo third step
+          when: on_fail
+jobs:
+  #build phase
+  build-frontend:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run: cd ./frontend && npm i && npm run build 
+
+  build-backend:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run: cd ./backend && npm i && npm run build
+
+  #Unit test phase
+  test-frontend:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run:
+          name: Frontend Test
+          command: | 
+            cd ./frontend && npm i
+            npm install --save-dev jest-junit
+            npm run test --ci --reporters=default --reporters=jest-junit
+          
+      - store_test_results:
+          path: ./frontend/test-results/
+      - store_artifacts:
+          path: ./frontend/test-results/jest/results.xml
+    
+  test-backend:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run: 
+    
+          name: Backend Test
+          command: |
+            cd ./backend && npm i
+            npm install --save-dev jest-junit
+            npm run test --ci --reporters=default --reporters=jest-junit
+      - store_test_results:
+          path: ./backend/test-results/
+      - store_artifacts:
+          path: ./backend/test-results/jest/results.xml
+
+  #tests for security
+  frontend-security:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run:
+          name: Frontend Security Test
+          command: | 
+            cd ./frontend && npm i
+            npm audit --audit-level=critical
+       
+  backend-security:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run: 
+          name: Backend Security Test
+          command: |
+            cd ./backend && npm i
+            npm audit --audit-level=critical
+
+  #Infrastructure creation
+  network-infrastructure:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Setup network infrastructure
+          command: |
+            cd ./.circleci/files
+            aws cloudformation deploy \
+              --template-file ./network.yml \
+              --stack-name nanoDegNetworkStack \
+              --region us-west-2
+            
+  cloudfront-infrastructure:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Setup cloudfront infrastructure
+          command: |
+            cd ./.circleci/files
+            aws cloudformation deploy \
+              --template-file ./cloudfront.yml \
+              --stack-name nanoDegCloudfrontStack \
+              --parameter-overrides WorkflowID=nanodegfrontend \
+              --region us-west-2
+
+  backend-infrastructure:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Setup backend infrastructure
+          command: |
+            cd ./.circleci/files
+            aws cloudformation deploy \
+              --template-file ./backend.yml \
+              --stack-name nanoDegBackendStack \
+              --parameter-overrides ID=nanoDegBackend \
+              --region us-west-2 
+            
+  frontend-infrastructure:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Setup frontend infrastructure
+          command: |
+            cd ./.circleci/files
+            aws cloudformation deploy \
+              --template-file ./frontend.yml \
+              --stack-name nanoDegFrontendStack \
+              --parameter-overrides ID=nanodegfrontend \
+              --region us-west-2
+  save-old-bucketarn:
+    docker: 
+      - image: circleci/node:13.8.0
+    steps:  
+      - checkout       
+      - run:
+          name: Save the Bucket ARN
+          command: |
+            curl -H "Content-Type: text/plain" -H "token: ${CIRCLE_WORKFLOW_ID:0:6}" --request PUT --data "s3://udapeople-nanodegfrontend/*" https://api.memstash.io/values/bucket_arn
+
+  ##New infrastructure
+  new-backend-infrastructure:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Setup backend infrastructure
+          command: |
+            cd ./.circleci/files
+            aws cloudformation deploy \
+              --template-file ./backend.yml \
+              --stack-name nanoDegBackendStack-${CIRCLE_WORKFLOW_ID:0:7} \
+              --parameter-overrides ID=${CIRCLE_WORKFLOW_ID:0:7} \
+              --region us-west-2
+
+  save-new-backurl:
+    docker: 
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run:
+          name: Get backend url and Save it to memstash and inventory file
+          command: |
+            cd ./.circleci/ansible
+            if echo "[remote]" | tee inventory.txt ; then echo "string remote added to inventory file" ; else echo "failed to add string remote" ; fi
+            ##Get the backend URL
+            sudo apt-get install awscli -y
+            URL=$(aws ec2 describe-instances --filter Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7} --query 'Reservations[].Instances[].PublicDnsName' --region us-west-2 --output text)
+            ##Save the backend url
+            if echo $URL | tee -a inventory.txt ; then echo "backend url appended to inventory file" ; else echo "failed to add backend url to inventory file" ; fi
+            curl -H "Content-Type: text/plain" -H "token: ${CIRCLE_WORKFLOW_ID:0:7}" --request PUT --data "$URL" https://api.memstash.io/values/backend_url
+
+  new-frontend-infrastructure:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Setup frontend infrastructure
+          command: |
+            cd ./.circleci/files
+            aws cloudformation deploy \
+              --template-file ./frontend.yml \
+              --stack-name nanoDegFrontendStack-${CIRCLE_WORKFLOW_ID:0:7} \
+              --parameter-overrides ID=${CIRCLE_WORKFLOW_ID:0:7} \
+              --region us-west-2
+
+  #Configure new server
+  new-backend-config:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["48:54:a0:b5:41:d3:4e:c2:0f:f8:b4:1e:8b:08:d5:35"]
+      - run:
+          name: Server dependencies
+          command: |
+              sudo apt-get update
+              sudo apt-get install python3 -y
+              sudo apt-get install python3-pip -y
+              pip3 install ansible
+              sudo apt-get install awscli -y
+              cd ./.circleci/ansible
+              if echo "[remote]" | tee inventory.txt ; then echo "string remote added to inventory file" ; else echo "failed to add string remote" ; fi
+              URL=$(aws ec2 describe-instances --filter Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7} --query 'Reservations[].Instances[].PublicIpAddress' --region us-west-2 --output text)
+              #URL=$(aws ec2 describe-instances --filter Name=tag:Name,Values=backend-27acb74 --query 'Reservations[].Instances[].PublicIpAddress' --region us-west-2 --output text)
+              ##Save the backend url
+              if echo $URL | tee -a inventory.txt ; then echo "backend url appended to inventory file" ; else echo "failed to add backend url to inventory file" ; fi
+              ##run the playbook 
+              ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.txt main.yml
+              
+  #database migration
+  db-migrations:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["48:54:a0:b5:41:d3:4e:c2:0f:f8:b4:1e:8b:08:d5:35"]
+      - run:
+          name: Install dependencies
+          command: cd ./backend && npm i
+      - run:
+          name: Database migrations
+          command: cd ./backend && npm run migrations | tee migration_output.txt
+
+      - run:
+          name: Save result value
+          command: |
+            cd ./backend
+            if grep "executed successfully" migration_output.txt
+            then
+            curl -H "Content-Type: text/plain" -H "token: ${CIRCLE_WORKFLOW_ID:0:8}" --request PUT --data "true" https://api.memstash.io/values/<< pipeline.id >>_migrations
+            else
+            curl -H "Content-Type: text/plain" -H "token: ${CIRCLE_WORKFLOW_ID:0:8}" --request PUT --data "false" https://api.memstash.io/values/<< pipeline.id >>_migrations
+            fi
+
+  
+  #Copy backend files to ec2
+  upload-backend:
+    docker:
+      - image: python:3.7-alpine3.11
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["48:54:a0:b5:41:d3:4e:c2:0f:f8:b4:1e:8b:08:d5:35"]
+      - run:
+          name: Build Backend
+          command: |
+              apk add --update npm
+              cd ./backend && npm i && npm run build
+      - run:
+          name: Compress backend folder
+          command: |
+              cd ./backend
+              tar -cvzf dist.tar.gz ./dist
+      - run: 
+          name: Copy files to server
+          command: |
+              apk add --update ansible 
+              pip3 install awscli
+              cd ./.circleci/ansible
+              #run ansible playbook
+              URL=$(aws ec2 describe-instances --filter Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7} --query 'Reservations[].Instances[].PublicIpAddress' --region us-west-2 --output text)
+              #Save the backend url
+              if echo "[remote]" | tee inventory.txt ; then echo "string remote added to inventory file" ; else echo "failed to add string remote" ; fi
+              if echo $URL | tee -a inventory.txt ; then echo "backend url appended to inventory file" ; else echo "failed to add backend url to inventory file" ; fi
+              ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.txt backendCopy.yml
+
+  #Deploy frontend to s3bucket
+  deploy-frontend:
+    docker:
+      - image: python:3.7-alpine3.11
+    environment:
+      API_URL=""
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["48:54:a0:b5:41:d3:4e:c2:0f:f8:b4:1e:8b:08:d5:35"]
+      - run:
+          name: Rebuild frontend
+          command: |
+              apk add --update npm
+              apk add --update curl
+              API_URL=$(curl -H "token: ${CIRCLE_WORKFLOW_ID:0:7}" --request GET https://api.memstash.io/values/backend_url)
+              cd ./frontend && npm i && npm run build
+      - run:
+          name: Deploy frontend
+          command: |
+              pip3 install awscli
+              aws s3 sync ./frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2 --delete
+              #aws s3 sync ./frontend/dist s3://udapeople-2e05a45 --region us-west-2 --delete  
+
+  #Smoketest
+  smoketest:
+    docker:
+      - image: circleci/node:13.8.0
+    steps:
+      - checkout
+      - run:
+          name: backend smoketest
+          command: |
+              sudo apt-get update
+              sudo apt-get install awscli -y
+              BACKEND_IP=$(aws ec2 describe-instances \
+              --filters "Name=tag:Name,Values=backend-${CIRCLE_WORKFLOW_ID:0:7}" \
+              --query 'Reservations[*].Instances[*].PublicIpAddress' \
+              --output text \
+              --region us-west-2)
+              curl "http://${BACKEND_IP}:3030/api/status"
+      - run:
+          name: frontend smoketest
+          command: |
+              URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:7}.s3-website-us-west-2.amazonaws.com/#/employees"            
+              if curl -s ${URL} | grep "Welcome"
+              then
+              exit 1
+              else
+              exit 1
+              fi
+
+  #promotion phase
+  promotion:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Promote frontend to production
+          command: |
+              cd ./.circleci/files
+              aws cloudformation deploy \
+                --template-file ./cloudfront.yml \
+                --stack-name nanoDegCloudfrontStack \
+                --parameter-overrides WorkflowID=${CIRCLE_WORKFLOW_ID:0:7} \
+                --region us-west-2
+  
+  #cleanup phase
+  cleanup:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Clear the old resources.
+          command: |
+            aws s3 rm s3://udapeople-nanodegfrontend --region us-west-2 --recursive
+            aws cloudformation delete-stack --stack-name nanoDegFrontendStack --region us-west-2
+            aws cloudformation delete-stack --stack-name nanoDegBackendStack --region us-west-2
+
+  test:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: test exit
+          command: echo test exit code && exit 1
+      - com
+          
+
+workflows:
+  default:
+    jobs:
+      #- build-frontend:
+      #- build-backend:
+      #- test-frontend:
+      #   requires:
+      #     - build-frontend
+      #     - build-backend
+      #- test-backend:
+      #   requires:
+      #     - build-backend
+      #     - build-frontend
+      #- frontend-security:
+      #   requires:
+      #     - test-frontend
+      #     - test-backend
+      #- backend-security:
+      #   requires:
+      #     - test-backend
+      #     - test-frontend
+      #- network-infrastructure:
+      #   requires:
+      #     - frontend-security
+      #     - backend-security
+      #- frontend-infrastructure:
+      #   requires:
+      #     - network-infrastructure
+      #- frontend-infrastructure
+      #- save-old-bucketarn:
+      #   requires:
+      #     - frontend-infrastructure
+      #- backend-infrastructure:
+      #   requires:
+      #     - frontend-infrastructure
+      #- cloudfront-infrastructure:
+      #   requires:
+      #     - backend-infrastructure
+      #- new-backend-infrastructure:
+      #   requires:
+      #     - cloudfront-infrastructure
+      #- new-backend-infrastructure
+      #- new-frontend-infrastructure
+      #- new-frontend-infrastructure:
+      #   requires:
+      #     - cloudfront-infrastructure
+      #- save-new-backurl:
+      #   requires:
+      #     - new-backend-infrastructure
+      #- new-backend-config:
+      #   requires:
+      #     - new-backend-infrastructure   
+      #- db-migrations:
+      #   requires:
+      #     - new-backend-config 
+      #- upload-backend:
+      #   requires:
+      #     - db-migrations
+      #- deploy-frontend:
+      #   requires:
+      #     - upload-backend
+      #- smoketest:
+      #   requires:
+      #      - deploy-frontend
+      #- promotion:
+      #   requires:
+      #     - smoketest
+      #- cleanup:
+      #   requires:
+      #     - promotion
+      - test
+
+
+           
