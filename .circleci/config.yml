@@ -389,91 +389,116 @@ jobs:
           
 
 workflows:
-  Integrations:
-    triggers:
-       - schedule:
-           cron: "0 0 * * *"
-           filters:
-             branches:
-               only:
-                 - nanoDeg
+  default:
     jobs:
       - build-frontend
       - build-backend
       - test-frontend:
          requires:
            - build-frontend
-           - build-backend
       - test-backend:
          requires:
            - build-backend
-           - build-frontend
       - frontend-security:
          requires:
-           - test-frontend
-           - test-backend
+           - build-frontend
       - backend-security:
          requires:
-           - test-backend
-           - test-frontend
-
-  deployments:
-    triggers:
-       - schedule:
-           cron: "0 0 * * *"
-           filters:
-             branches:
-               only:
-                 - master
-    jobs:
-      
-      #- network-infrastructure:
-      #   requires:
-      #     - frontend-security
-      #     - backend-security
-      #- frontend-infrastructure:
-      #   requires:
-      #     - network-infrastructure
+           - build-backend
+      - network-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - build-frontend
+           - build-backend
+           - frontend-security
+           - backend-security
+      - frontend-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - network-infrastructure
       #- frontend-infrastructure
-      #- save-old-bucketarn:
-      #   requires:
-      #     - frontend-infrastructure
-      #- backend-infrastructure:
-      #   requires:
-      #     - frontend-infrastructure
-      #- cloudfront-infrastructure:
-      #   requires:
-      #     - backend-infrastructure
-      #- new-backend-infrastructure:
-      #   requires:
-      #     - cloudfront-infrastructure
-      - new-backend-infrastructure
-      - new-frontend-infrastructure
-      #- new-frontend-infrastructure:
-      #   requires:
-      #     - cloudfront-infrastructure
+      - save-old-bucketarn:
+         filters:
+            branches:
+              only: master
+         requires:
+           - frontend-infrastructure
+      - backend-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - frontend-infrastructure
+      - cloudfront-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - backend-infrastructure
+      - new-backend-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - cloudfront-infrastructure
+      #- new-backend-infrastructure
+      #- new-frontend-infrastructure
+      - new-frontend-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - cloudfront-infrastructure
       - save-new-backurl:
+         filters:
+            branches:
+              only: master
          requires:
            - new-backend-infrastructure
       - new-backend-config:
+         filters:
+            branches:
+              only: master
          requires:
            - new-backend-infrastructure   
       - db-migrations:
+         filters:
+            branches:
+              only: master
          requires:
            - new-backend-config 
       - upload-backend:
+         filters:
+            branches:
+              only: master
          requires:
            - db-migrations
       - deploy-frontend:
+         filters:
+            branches:
+              only: master
          requires:
            - upload-backend
       - smoketest:
+         filters:
+            branches:
+              only: master
          requires:
             - deploy-frontend
       - promotion:
+         filters:
+            branches:
+              only: master
          requires:
            - smoketest
       - cleanup:
+         filters:
+            branches:
+              only: master
          requires:
            - promotion
 
