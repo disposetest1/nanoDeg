@@ -16,4 +16,4 @@
   become: true
   shell: |
      cd ./backend
-     npm start
+     pm2 start "npm run start"
