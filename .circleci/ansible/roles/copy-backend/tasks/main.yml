@@ -3,7 +3,7 @@
   become: true
   unarchive:
     src: /root/project/backend/dist.tar.gz
-    dest: /home/ubuntu
+    dest: /home/ubuntu/backend
 
 
 
