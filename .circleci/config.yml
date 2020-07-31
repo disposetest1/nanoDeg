@@ -305,6 +305,33 @@ jobs:
               if echo $URL | tee -a inventory.txt ; then echo "backend url appended to inventory file" ; else echo "failed to add backend url to inventory file" ; fi
               ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.txt backendCopy.yml
 
+
+  #test
+  test:
+    docker:
+      - image: python:3.7-alpine3.11
+    steps:
+      - checkout
+      - add_ssh_keys:
+          fingerprints: ["48:54:a0:b5:41:d3:4e:c2:0f:f8:b4:1e:8b:08:d5:35"]
+      - run:
+          name: Build Backend
+          command: |
+              apk add --update npm
+              cd ./backend && npm i && npm run build
+      - run:
+          name: Compress backend folder
+          command: tar -cvzf dist.tar.gz ./backend
+      - run: 
+          name: Copy files to server
+          command: |
+              apk add --update ansible 
+              pip3 install awscli
+              cd ./.circleci/ansible
+              #run ansible playbook
+              ANSIBLE_HOST_KEY_CHECKING=False ansible-playbook -i inventory.txt test.yml
+
+
   #Deploy frontend to s3bucket
   deploy-frontend:
     docker:
@@ -391,73 +418,117 @@ jobs:
 workflows:
   default:
     jobs:
-      #- build-frontend:
-      #- build-backend:
+      #- build-frontend
+      #- build-backend
       #- test-frontend:
       #   requires:
       #     - build-frontend
-      #     - build-backend
       #- test-backend:
       #   requires:
       #     - build-backend
-      #     - build-frontend
       #- frontend-security:
       #   requires:
-      #     - test-frontend
-      #     - test-backend
+      #     - build-frontend
       #- backend-security:
       #   requires:
-      #     - test-backend
-      #     - test-frontend
+      #     - build-backend
       #- network-infrastructure:
+      #   filters:
+      #      branches:
+      #        only: master
       #   requires:
+      #     - build-frontend
+      #     - build-backend
       #     - frontend-security
       #     - backend-security
       #- frontend-infrastructure:
+      #   filters:
+      #      branches:
+      #        only: master
       #   requires:
       #     - network-infrastructure
-      #- frontend-infrastructure
+      ##- frontend-infrastructure
       #- save-old-bucketarn:
+      #   filters:
+      #      branches:
+      #        only: master
       #   requires:
       #     - frontend-infrastructure
       #- backend-infrastructure:
+      #   filters:
+      #      branches:
+      #        only: master
       #   requires:
       #     - frontend-infrastructure
       #- cloudfront-infrastructure:
+      #   filters:
+      #      branches:
+      #        only: master
       #   requires:
       #     - backend-infrastructure
       #- new-backend-infrastructure:
+      #   filters:
+      #      branches:
+      #        only: master
       #   requires:
       #     - cloudfront-infrastructure
-      - new-backend-infrastructure
-      - new-frontend-infrastructure
+      ##- new-backend-infrastructure
+      ##- new-frontend-infrastructure
       #- new-frontend-infrastructure:
+      #   filters:
+      #      branches:
+      #        only: master
       #   requires:
       #     - cloudfront-infrastructure
-      - save-new-backurl:
-         requires:
-           - new-backend-infrastructure
-      - new-backend-config:
-         requires:
-           - new-backend-infrastructure   
-      - db-migrations:
-         requires:
-           - new-backend-config 
-      - upload-backend:
-         requires:
-           - db-migrations
-      - deploy-frontend:
-         requires:
-           - upload-backend
-      - smoketest:
-         requires:
-            - deploy-frontend
-      - promotion:
-         requires:
-           - smoketest
-      - cleanup:
-         requires:
-           - promotion
+      #- save-new-backurl:
+      #   filters:
+      #      branches:
+      #        only: master
+      #   requires:
+      #     - new-backend-infrastructure
+      #- new-backend-config:
+      #   filters:
+      #     branches:
+      #        only: master
+      #   requires:
+      #     - new-backend-infrastructure   
+      #- db-migrations:
+      #   filters:
+      #      branches:
+      #        only: master
+      #   requires:
+      #     - new-backend-config 
+      #- upload-backend:
+      #   filters:
+      #      branches:
+      #        only: master
+      #   requires:
+      #     - db-migrations
+      #- deploy-frontend:
+      #   filters:
+      #      branches:
+      #        only: master
+      #   requires:
+      #     - upload-backend
+      #- smoketest:
+      #   filters:
+      #      branches:
+      #        only: master
+      #   requires:
+      #      - deploy-frontend
+      #- promotion:
+      #   filters:
+      #    branches:
+      #        only: master
+      #   requires:
+      #     - smoketest
+      #- cleanup:
+      #   filters:
+      #      branches:
+      #        only: master
+      #   requires:
+      #     - promotion
+      - test
 
 
            
