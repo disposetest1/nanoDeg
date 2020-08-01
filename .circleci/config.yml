@@ -335,7 +335,7 @@ jobs:
           command: |
               pip3 install awscli
               #aws s3 sync ./frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2 --delete
-              aws s3 sync ./frontend s3://udapeople-9eea598 --region us-west-2 --delete
+              aws s3 sync ./frontend/dist s3://udapeople-9eea598 --region us-west-2 --delete
 
   #Smoketest
   smoketest:
