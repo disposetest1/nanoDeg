@@ -330,8 +330,6 @@ jobs:
               cd ./frontend
               API_URL=http://$(curl -H "token: ${CIRCLE_WORKFLOW_ID:0:7}" --request GET https://api.memstash.io/values/backend_url):3030 | tee .env
               echo 'export API_URL=http://$(curl -H "token: ${CIRCLE_WORKFLOW_ID:0:7}" --request GET https://api.memstash.io/values/backend_url):3030' >> $BASH_ENV
-              #API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030 | tee .env
-              #echo 'export API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030' >> $BASH_ENV
               source $BASH_ENV
               npm i && npm run build
 
@@ -340,7 +338,6 @@ jobs:
           command: | 
               pip3 install awscli
               aws s3 sync ./frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2 --delete
-              #aws s3 sync ./frontend/dist s3://udapeople-9eea598 --region us-west-2 --delete
 
   #Smoketest
   smoketest:
@@ -404,34 +401,33 @@ jobs:
 workflows:
   default:
     jobs:
-      #- build-frontend
-      #- build-backend
-      #- test-frontend:
-      #   requires:
-      #     - build-frontend
-      #- test-backend:
-      #   requires:
-      #     - build-backend
-      #- frontend-security:
-      #   requires:
-      #     - build-frontend
-      #- backend-security:
-      #   requires:
-      #     - build-backend
-      #- network-infrastructure:
-      #   filters:
-      #      branches:
-      #        only: master
-      #   requires:
-      #     - frontend-security
-      #     - backend-security
-      #- frontend-infrastructure:
-      #   filters:
-      #      branches:
-      #        only: master
-      #   requires:
-      #     - network-infrastructure
-      - frontend-infrastructure
+      - build-frontend
+      - build-backend
+      - test-frontend:
+         requires:
+           - build-frontend
+      - test-backend:
+         requires:
+           - build-backend
+      - frontend-security:
+         requires:
+           - build-frontend
+      - backend-security:
+         requires:
+           - build-backend
+      - network-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - frontend-security
+           - backend-security
+      - frontend-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - network-infrastructure
       - save-old-bucketarn:
          filters:
             branches:
