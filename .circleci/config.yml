@@ -323,25 +323,24 @@ jobs:
       - add_ssh_keys:
           fingerprints: ["48:54:a0:b5:41:d3:4e:c2:0f:f8:b4:1e:8b:08:d5:35"]
       - run:
-          name: Rebuild and deploy frontend
+          name: Rebuild frontend
           command: |
               apk add --update npm
               apk add --update curl
-              pip3 install awscli
               cd ./frontend
-              #API_URL=http://$(curl -H "token: ${CIRCLE_WORKFLOW_ID:0:7}" --request GET https://api.memstash.io/values/backend_url):3030
-              API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030 | tee .env
+              API_URL=http://$(curl -H "token: ${CIRCLE_WORKFLOW_ID:0:7}" --request GET https://api.memstash.io/values/backend_url):3030 | tee .env
+              echo 'export API_URL=http://$(curl -H "token: ${CIRCLE_WORKFLOW_ID:0:7}" --request GET https://api.memstash.io/values/backend_url):3030' >> $BASH_ENV
+              #API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030 | tee .env
               #echo 'export API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030' >> $BASH_ENV
-              #source $BASH_ENV
+              source $BASH_ENV
               npm i && npm run build
-              #aws s3 sync ./frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2 --delete
-              aws s3 sync ./dist s3://udapeople-9eea598 --region us-west-2 --delete
-      #- run:
-      #    name: Deploy frontend
-      #    command: | 
-      #        pip3 install awscli
-      #        #aws s3 sync ./frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2 --delete
-      #        aws s3 sync ./frontend/dist s3://udapeople-9eea598 --region us-west-2 --delete
+
+      - run:
+          name: Deploy frontend
+          command: | 
+              pip3 install awscli
+              aws s3 sync ./frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2 --delete
+              #aws s3 sync ./frontend/dist s3://udapeople-9eea598 --region us-west-2 --delete
 
   #Smoketest
   smoketest:
@@ -405,7 +404,112 @@ jobs:
 workflows:
   default:
     jobs:
-      - deploy-frontend
+      #- build-frontend
+      #- build-backend
+      #- test-frontend:
+      #   requires:
+      #     - build-frontend
+      #- test-backend:
+      #   requires:
+      #     - build-backend
+      #- frontend-security:
+      #   requires:
+      #     - build-frontend
+      #- backend-security:
+      #   requires:
+      #     - build-backend
+      #- network-infrastructure:
+      #   filters:
+      #      branches:
+      #        only: master
+      #   requires:
+      #     - frontend-security
+      #     - backend-security
+      #- frontend-infrastructure:
+      #   filters:
+      #      branches:
+      #        only: master
+      #   requires:
+      #     - network-infrastructure
+      - frontend-infrastructure
+      - save-old-bucketarn:
+         filters:
+            branches:
+              only: master
+         requires:
+           - frontend-infrastructure
+      - backend-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - frontend-infrastructure
+      - cloudfront-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - backend-infrastructure
+      - new-backend-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - cloudfront-infrastructure
+      - new-frontend-infrastructure:
+         filters:
+            branches:
+              only: master
+         requires:
+           - cloudfront-infrastructure
+      - save-new-backurl:
+         filters:
+            branches:
+              only: master
+         requires:
+           - new-backend-infrastructure
+      - new-backend-config:
+         filters:
+           branches:
+              only: master
+         requires:
+           - new-backend-infrastructure   
+      - db-migrations:
+         filters:
+            branches:
+              only: master
+         requires:
+           - new-backend-config 
+      - upload-backend:
+         filters:
+            branches:
+              only: master
+         requires:
+           - db-migrations
+      - deploy-frontend:
+         filters:
+            branches:
+              only: master
+         requires:
+           - upload-backend
+      - smoketest:
+         filters:
+            branches:
+              only: master
+         requires:
+            - deploy-frontend
+      - promotion:
+         filters:
+          branches:
+              only: master
+         requires:
+           - smoketest
+      - cleanup:
+         filters:
+            branches:
+              only: master
+         requires:
+           - promotion
 
 
            
