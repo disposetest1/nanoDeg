@@ -333,7 +333,7 @@ jobs:
               API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030
               cd ./frontend && npm i && npm run build
               #aws s3 sync ./frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2 --delete
-              aws s3 sync ./frontend/dist s3://udapeople-9eea598 --region us-west-2 --delete
+              aws s3 sync ./dist s3://udapeople-9eea598 --region us-west-2 --delete
       #- run:
       #    name: Deploy frontend
       #    command: |
