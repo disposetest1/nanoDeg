@@ -331,8 +331,8 @@ jobs:
               cd ./frontend
               #API_URL=http://$(curl -H "token: ${CIRCLE_WORKFLOW_ID:0:7}" --request GET https://api.memstash.io/values/backend_url):3030
               #API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030 | tee .env
-              echo 'export API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030' >> $BASH_ENV
-              source $BASH_ENV
+              #echo 'export API_URL=http://ec2-54-186-144-248.us-west-2.compute.amazonaws.com:3030' >> $BASH_ENV
+              #source $BASH_ENV
               npm i && npm run build
               #aws s3 sync ./frontend/dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:7} --region us-west-2 --delete
               aws s3 sync ./dist s3://udapeople-9eea598 --region us-west-2 --delete
